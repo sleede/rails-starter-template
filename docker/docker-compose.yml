@@ -1,0 +1,44 @@
+version: '2'
+services:
+  @APP_NAME:
+    image: dockerhub.sleede.com/@APP_NAME
+    environment:
+      RAILS_ENV: production
+      RACK_ENV: production
+    env_file:
+      - ./config/env
+    volumes:
+      - ./public/assets:/usr/src/app/public/assets
+      - ./public/uploads:/usr/src/app/public/uploads
+      - ./log:/var/log/supervisor
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  postgres:
+    image: postgres:9.4
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:3
+    volumes:
+      - ./redis:/data
+    restart: always
+
+  nginx:
+    image: nginx:1.9
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx:/etc/nginx/conf.d
+      - ./letsencrypt/etc:/etc/letsencrypt
+      - ./log:/var/log/nginx
+    volumes_from:
+      - @APP_NAME:ro
+    links:
+      - @APP_NAME:@APP_NAME
+    restart: always

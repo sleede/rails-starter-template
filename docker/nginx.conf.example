@@ -1,0 +1,84 @@
+upstream puma {
+  server @APP_NAME:3000;
+}
+
+server {
+  listen 443 ssl;
+  server_name MAIN_HOST;
+  root /usr/src/app/public;
+  ssl on;
+  ## with your ssl certificate
+  #ssl_certificate /etc/nginx/conf.d/ssl/MAIN_HOST.crt;
+  #ssl_certificate_key /etc/nginx/conf.d/ssl/MAIN_HOST.deprotected.key;
+  ##
+  ## with letsencrypt certificate (free)
+  ssl_certificate_key /etc/letsencrypt/live/MAIN_HOST/privkey.pem;
+  ssl_certificate /etc/letsencrypt/live/MAIN_HOST/fullchain.pem;
+  ssl_trusted_certificate /etc/letsencrypt/live/MAIN_HOST/chain.pem;
+  ##
+  ssl_protocols TLSv1.2 TLSv1.1 TLSv1;
+  ssl_prefer_server_ciphers on;
+  ssl_ciphers 'kEECDH+ECDSA+AES128 kEECDH+ECDSA+AES256 kEECDH+AES128 kEECDH+AES256 kEDH+AES128 kEDH+AES256 DES-CBC3-SHA +SHA !aNULL !eNULL !LOW !MD5 !EXP !DSS !PSK !SRP !kECDH !CAMELLIA !RC4 !SEED';
+  ssl_session_cache shared:SSL:50m;
+  ssl_session_tickets off;
+  ssl_session_timeout 1d;
+  ssl_dhparam /etc/nginx/conf.d/ssl/dhparam.pem;
+  add_header Strict-Transport-Security max-age=15768000;
+  ssl_stapling on;
+  ssl_stapling_verify on;
+
+
+  location ^~ /assets/ {
+    gzip_static on;
+    expires max;
+    add_header Cache-Control public;
+  }
+
+  ## required by letsencrypt to generate the certificat
+  location /.well-known/acme-challenge {
+    root /etc/letsencrypt/webrootauth;
+    default_type "text/plain";
+  }
+  ##
+
+  try_files $uri/index.html $uri @puma;
+  location @puma {
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Host $http_host;
+    proxy_redirect off;
+    proxy_pass http://puma;
+  }
+
+  client_max_body_size 4G;
+  keepalive_timeout 10;
+
+  error_page 500 502 504 /500.html;
+  error_page 503 @503;
+
+  # Return a 503 error if the maintenance page exists.
+  if (-f /usr/src/app/public/maintenance.html) {
+    return 503;
+  }
+
+  location @503 {
+    # Serve static assets if found.
+    if (-f $request_filename) {
+      break;
+    }
+
+    # Set root to the shared directory.
+    root /usr/src/app/public/;
+    rewrite ^(.*)$ /maintenance.html break;
+  }
+
+  # no spam bot
+  if ($http_referer ~* (guardlink.org|free-share-buttons|social-buttons|buy-cheap-online.info|social-buttons.com|free-share-buttons.com|darodar.com|blackhatworth.com|hulfingtonpost.com|priceg.com|semalt.com|imaspammer.com|iedit.ilovevitaly.com|7makemoneyonline.com|iedit.ilovevitaly.com|7makemoneyonline.com|gamersyde.com|iloveitaly.com|econom.co|semalt.com|forum.topic44637676.darodar.com|darodar.com|iskalko.ru|ilovevitaly.ru|ilovevitaly.com|ilovevitaly.co|o-o-8-o-o.ru|o-o-6-o-o.ru|buttons-for-website.com|semalt.semalt.com|cenoval.ru|priceg.com|darodar.com|cenokos.ru|seoexperimenty.ru|gobongo.info|vodkoved.ru|adcash.com|websocial.me|cityadspix.com|luxup.ru|ykecwqlixx.ru|superiends.org|slftsdybbg.ru|edakgfvwql.ru|socialseet.ru|screentoolkit.com|econom.co|semalt.com|savetubevideo.com|shopping.ilovevitaly.com|iedit.ilovevitaly.com|forum.topic52548358.darodar.com|forum.topic53813291.darodar.com|share-buttons.com|event-tracking.com|success-seo.com|free-floating-buttons.com|get-free-social-traffic.com|chinese-amezon.com|get-free-traffic-now.com|free-social-buttons.com|videos-for-your-business.com)) { return 403; }
+
+}
+
+
+server {
+  listen 80;
+  server_name MAIN_HOST ANOTHER_DOMAIN_1 ANOTHER_DOMAIN_2;
+  rewrite ^ URL_WITH_PROTOCOL_HTTPS$request_uri? permanent;
+}
