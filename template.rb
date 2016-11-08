@@ -51,7 +51,7 @@ end
 if yes?('Do you want to install postgresql?')
   gem 'pg', '~> 0.18'
 
-  file 'config/database.yml.example', <<-CODE
+  database_yml = <<-CODE
 default: &default
   adapter: postgresql
   encoding: unicode
@@ -75,6 +75,8 @@ production:
   password: <%= Rails.application.secrets.postgres_password %>
   CODE
 
+  file 'config/database.yml.example', database_yml
+  file 'config/database.yml', database_yml
 
   insert_into_file 'config/secrets.yml', after: 'production:' do
   <<-CODE
@@ -338,13 +340,17 @@ end
 ## MAILING CONFIGURATION
 ###
 
+environment 'config.action_mailer.delivery_method = Rails.application.secrets.mail_delivery_method.to_sym', env: 'production'
+
 environment 'config.action_mailer.default_url_options = { host: Rails.application.secrets.default_host, protocol: Rails.application.secrets.default_protocol }'
 
 environment 'config.action_mailer.smtp_settings = {
-    :address   => Rails.application.secrets.smtp_address,
-    :port      => Rails.application.secrets.smtp_port,
-    :user_name => Rails.application.secrets.smtp_user_name,
-    :password  => Rails.application.secrets.smtp_password
+    address:              Rails.application.secrets.smtp_address,
+    port:                 Rails.application.secrets.smtp_port,
+    user_name:            Rails.application.secrets.smtp_user_name,
+    password:             Rails.application.secrets.smtp_password,
+    authentication:       "plain",
+    enable_starttls_auto: true
   }', env: 'production'
 
 insert_into_file 'config/secrets.yml', after: 'production:' do
@@ -353,6 +359,7 @@ insert_into_file 'config/secrets.yml', after: 'production:' do
   smtp_port: <%= ENV["SMTP_PORT"] %>
   smtp_user_name: <%= ENV["SMTP_USER_NAME"] %>
   smtp_password: <%= ENV["SMTP_PASSWORD"] %>
+  mail_delivery_method: <%= ENV["MAIL_DELIVERY_METHOD"] %>
 CODE
 end
 
@@ -378,6 +385,8 @@ end
 ## DETAILS
 ###
 
+environment 'config.action_mailer.asset_host = "#{Rails.application.secrets.default_protocol}://#{Rails.application.secrets.default_host}"'
+
 # make possible to use url helpers in assets
 environment 'config.assets.configure do |env|
       env.context_class.class_eval do
@@ -388,10 +397,17 @@ environment 'config.assets.configure do |env|
 # adds database.yml to .gitignore
 run "echo /config/database.yml >> .gitignore"
 
+# adds CHANGELOG.md file
+run "touch CHANGELOG.md"
+
 p 'TO FINISH INSTALLATION, DO THE FOLLOWING THINGS'
 p "execute command 'cd #{app_name}'"
 p "execute command 'bundle install'"
 p "execute command 'bower init'" if want_bower
 p "execute command 'rails generate pundit:install'" if want_pundit
-p "execute command 'rails generate devise:install'" if want_devise
+if want_devise
+  p "execute command 'rails generate devise:install'"
+  p "configure devise updating the file config/initializers/devise.rb"
+end
 p "execute command 'rails generate friendly_id'" if want_friendly_id
+p "DO NOT FORGET to configure the locale and the time_zone of your project"
