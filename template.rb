@@ -121,8 +121,6 @@ if yes?("Do you want to install letter_opener?")
   \n  gem 'letter_opener'
   CODE
   end
-
-  environment 'config.action_mailer.delivery_method = :letter_opener', env: 'development'
 end
 
 ###
@@ -340,7 +338,7 @@ end
 ## MAILING CONFIGURATION
 ###
 
-environment 'config.action_mailer.delivery_method = Rails.application.secrets.mail_delivery_method.to_sym', env: 'production'
+environment 'config.action_mailer.delivery_method = Rails.application.secrets.mail_delivery_method.to_sym'
 
 environment 'config.action_mailer.default_url_options = { host: Rails.application.secrets.default_host, protocol: Rails.application.secrets.default_protocol }'
 
