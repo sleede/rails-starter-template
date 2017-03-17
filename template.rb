@@ -338,7 +338,7 @@ end
 ## MAILING CONFIGURATION
 ###
 
-environment 'config.action_mailer.delivery_method = Rails.application.secrets.mail_delivery_method.to_sym'
+environment 'config.action_mailer.delivery_method = Rails.application.secrets.mail_delivery_method&.to_sym'
 
 environment 'config.action_mailer.default_url_options = { host: Rails.application.secrets.default_host, protocol: Rails.application.secrets.default_protocol }'
 
@@ -360,6 +360,13 @@ insert_into_file 'config/secrets.yml', after: 'production:' do
   mail_delivery_method: <%= ENV["MAIL_DELIVERY_METHOD"] %>
 CODE
 end
+
+insert_into_file 'config/secrets.yml', after: 'test:' do
+<<-CODE
+\n  mail_delivery_method: test
+CODE
+end
+
 
 ###
 ## BOWER
