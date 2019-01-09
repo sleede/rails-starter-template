@@ -39,3 +39,7 @@ docker-compose up -d
 #### example of command run passing env variables
 
 docker-compose run --rm -e FIXTURES=categories @APP_NAME bundle exec rake ip:fixtures:load
+
+#### edit credentials
+
+docker-compose run --rm -e EDITOR=nano @APP_NAME bundle exec rails credentials:edit

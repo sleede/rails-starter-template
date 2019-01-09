@@ -1,5 +1,8 @@
 @template_root = File.expand_path(File.join(File.dirname(__FILE__)))
 
+run 'touch config/credentials.yml.example'
+run 'echo secret_key_base: >> config/credentials.yml.example'
+
 ##
 ## DOCKER
 ##
@@ -10,12 +13,13 @@ run "mkdir docker"
   file file, File.read("#{@template_root}/#{file}").gsub('@APP_NAME', app_name.underscore)
 end
 
+
 ###
 ## PROCFILE
 ###
 
 file 'Procfile', <<-CODE
-web:    bundle exec rails server puma -p 5300 -b0.0.0.0
+web:    bundle exec rails server puma -p 3000
 CODE
 
 ###
@@ -29,18 +33,23 @@ run "echo '#{app_name}' >> .ruby-gemset"
 ## REMOVING GEMS
 ###
 
-gsub_file 'Gemfile', /gem 'turbolinks'.+$/, ""
 gsub_file 'Gemfile', /gem 'sqlite3'.*$/, ""
+gsub_file 'Gemfile', /gem 'sass-rails'.*$/, ""
+gsub_file 'Gemfile', /gem 'uglifier'.*$/, ""
+gsub_file 'Gemfile', /gem 'tzinfo-data'.*$/, ""
 
 ###
-## GENERAL CONFIGURATION
+### adds gems always used
 ###
 
-insert_into_file 'config/secrets.yml', after: 'production:' do
-<<-CODE
-\n  default_host: <%= ENV["DEFAULT_HOST"] %>
-  default_protocol: <%= ENV["DEFAULT_PROTOCOL"] %>
-  default_mail_from: <%= ENV["DEFAULT_MAIL_FROM"] %>
+## inflections
+gem 'inflections'
+
+## pundit
+gem 'pundit'
+insert_into_file 'app/controllers/application_controller.rb', after: 'class ApplicationController < ActionController::Base' do
+  <<-CODE
+\n  include Pundit
 CODE
 end
 
@@ -49,7 +58,7 @@ end
 ###
 
 if yes?('Do you want to install postgresql?')
-  gem 'pg', '~> 0.18'
+  gem 'pg'
 
   database_yml = <<-CODE
 default: &default
@@ -70,45 +79,33 @@ test:
 production:
   <<: *default
   database: #{app_name.underscore}_production
-  host: <%= Rails.application.secrets.postgres_host %>
-  username: <%= Rails.application.secrets.postgres_username %>
-  password: <%= Rails.application.secrets.postgres_password %>
+  host: <%= Rails.application.credentials.postgres_host %>
+  username: <%= Rails.application.credentials.postgres_username %>
+  password: <%= Rails.application.credentials.postgres_password %>
   CODE
 
   file 'config/database.yml.example', database_yml
   file 'config/database.yml', database_yml
 
-  insert_into_file 'config/secrets.yml', after: 'production:' do
+  run 'echo postgres_host: >> config/credentials.yml.example'
+  run 'echo postgres_username: >> config/credentials.yml.example'
+  run 'echo postgres_password: >> config/credentials.yml.example'
+end
+
+if yes?("Do you want to install awesome_print gem?")
+  insert_into_file 'Gemfile', after: 'group :development, :test do' do
   <<-CODE
-  \n  postgres_host: <%= ENV["POSTGRES_HOST"] %>
-  postgres_username: <%= ENV["POSTGRES_USERNAME"] %>
-  postgres_password: <%= ENV["POSTGRES_PASSWORD"] %>
+  \n  gem 'awesome_print'
   CODE
   end
 end
 
-gem 'autoprefixer-rails'
-
-###
-## Turbolinks (classic)
-###
-
-if yes?("Do you want to install turbolinks classic?")
-  gem 'turbolinks', '2.5.3'
-else
-  gsub_file 'app/assets/javascripts/application.js', '//= require turbolinks', ''
-end
-
-insert_into_file 'Gemfile', after: 'group :development, :test do' do
-<<-CODE
-\n  gem 'awesome_print'
-CODE
-end
-
-insert_into_file 'Gemfile', after: 'group :development do' do
-<<-CODE
-\n  gem 'foreman'
-CODE
+if yes?("Do you want to install foreman gem?")
+  insert_into_file 'Gemfile', after: 'group :development do' do
+  <<-CODE
+  \n  gem 'foreman'
+  CODE
+  end
 end
 
 ###
@@ -124,27 +121,11 @@ if yes?("Do you want to install letter_opener?")
 end
 
 ###
-## GEMS FOR PRODUCTION
+## image_processing gem
 ###
 
-gem_group :production do
-  gem 'rails_12factor'
-end
-
-###
-## CARRIERWAVE (file uploads)
-###
-
-if yes?("Do you want to install carrierwave?")
-  gem 'carrierwave'
-end
-
-###
-## MINI-MAGICK (image processing)
-###
-
-if yes?("Do you want to install mini_magick?")
-  gem 'mini_magick'
+if yes?("Do you want to process images? ie install 'image_processing' gem")
+  gem 'image_processing'
 end
 
 ###
@@ -154,9 +135,8 @@ end
 if yes?("Do you want to install sidekiq and sidekiq-cron?")
   gem 'sidekiq'
   gem 'sidekiq-cron'
-  gem "sinatra", ">= 2.0.0.beta2", require: false
 
-  insert_into_file 'Procfile', after: '0.0.0.0' do
+  insert_into_file 'Procfile', after: '3000' do
     <<-CODE
 \nworker: bundle exec sidekiq -C ./config/sidekiq.yml
     CODE
@@ -175,21 +155,21 @@ if yes?("Do you want to install sidekiq and sidekiq-cron?")
 
   insert_into_file 'config/routes.rb', after: 'Rails.application.routes.draw do' do
     <<-CODE
-\nauthenticate :user, lambda { |u| u.admin? } do
-  mount Sidekiq::Web => '/sidekiq'
-end
+  \n  mount Sidekiq::Web => '/sidekiq'
     CODE
   end
 
   insert_into_file 'config/routes.rb', before: 'Rails.application.routes.draw' do
     <<-CODE
 require 'sidekiq/web'
+require 'sidekiq/cron/web'
+
     CODE
   end
 
 
   initializer 'sidekiq.rb', <<-CODE
-redis_url = "redis://\#{Rails.application.secrets.redis_host}:6379"
+redis_url = "redis://\#{Rails.application.credentials.redis_host}:6379"
 
 Sidekiq.configure_server do |config|
   config.redis = { url: redis_url }
@@ -211,50 +191,13 @@ end
 --- {}
   CODE
 
-  insert_into_file 'config/secrets.yml', after: 'production:' do
-<<-CODE
-\n  redis_host: <%= ENV["REDIS_HOST"] %>
-  CODE
-  end
-
-  insert_into_file 'config/secrets.yml', after: 'test:' do
-<<-CODE
-\n  redis_host: localhost
-  CODE
-  end
-
-  insert_into_file 'config/secrets.yml', after: 'development:', force: true do
-<<-CODE
-\n  redis_host: localhost
-  CODE
-  end
+  run 'echo redis_host: >> config/credentials.yml.example'
 
   environment 'config.active_job.queue_adapter = :sidekiq'
 
   file 'tmp/pids/sidekiq.pid', ""
 end
 
-###
-## KAMINARI (pagination)
-###
-
-if yes?("Do you want to install kaminari?")
-  gem 'kaminari'
-end
-
-###
-## Authorization system
-###
-
-if want_pundit = yes?("Do you want to install pundit?")
-  gem 'pundit'
-
-  insert_into_file 'app/controllers/application_controller.rb', after: 'class ApplicationController < ActionController::Base' do
-    <<-CODE
-\n  include Pundit
-CODE
-  end
-end
 
 ###
 ## DEVISE (authentication)
@@ -263,44 +206,7 @@ end
 if want_devise = yes?("Do you want to install devise?")
   gem 'devise'
 
-  environment 'config.to_prepare do
-      Devise::Mailer.layout "mailer"
-    end'
-end
-
-###
-## GROWLYFLASH (growl notifications)
-###
-
-if yes?("Do you want to install growlyflash?")
-  gem 'growlyflash'
-
-  file 'app/assets/javascripts/config/growly_flash.js.coffee', <<-CODE
-Growlyflash.defaults = $.extend on, Growlyflash.defaults,
-  align:   'right'  # horizontal aligning (left, right or center)
-  delay:   3000     # auto-dismiss timeout (0 to disable auto-dismiss)
-  dismiss: yes      # allow to show close button
-  spacing: 10       # spacing between alerts
-  target:  'body'   # selector to target element where to place alerts
-  title:   no       # switch for adding a title
-  type:    null     #  alert class by default
-  class:   ['alert', 'growlyflash', 'fade']
-  type_mapping:
-    alert:   'warning'
-    error:   'danger'
-    notice:  'info'
-    success: 'success'
-
-
-$(document).on 'click', '[data-dismiss="alert"]', ->
-  $(@).parent().remove()
-  CODE
-
-  insert_into_file 'app/assets/javascripts/application.js', before: '//= require_tree' do
-    <<-CODE
-//= require growlyflash
-    CODE
-  end
+  environment 'config.to_prepare { Devise::Mailer.layout "mailer" }'
 end
 
 ###
@@ -311,93 +217,46 @@ if want_friendly_id = yes?("Do you want to install friendly_id?")
   gem 'friendly_id'
 end
 
-run 'rm app/assets/stylesheets/application.css'
-run "touch app/assets/stylesheets/application.scss"
-
-###
-## TWITTER BOOTSTRAP
-###
-
-if yes?("Do you want to install twitter/bootstrap?")
-  gem 'bootstrap'
-  add_source 'https://rails-assets.org' do
-    gem 'rails-assets-tether', '>= 1.1.0'
-  end
-
-  insert_into_file "app/assets/javascripts/application.js", before: '//= require_tree' do
-      <<-CODE
-//= require tether
-//= require bootstrap-sprockets
-      CODE
-  end
-
-  run "echo '@import \"bootstrap\";' >> app/assets/stylesheets/application.scss"
-end
-
 ###
 ## MAILING CONFIGURATION
 ###
 
-environment 'config.action_mailer.delivery_method = Rails.application.secrets.mail_delivery_method&.to_sym'
+environment 'config.action_mailer.delivery_method = Rails.application.credentials.mail_delivery_method&.to_sym'
 
-environment 'config.action_mailer.default_url_options = { host: Rails.application.secrets.default_host, protocol: Rails.application.secrets.default_protocol }'
+environment 'config.action_mailer.default_url_options = { host: Rails.application.credentials.default_host, protocol: Rails.application.credentials.default_protocol }'
 
 environment 'config.action_mailer.smtp_settings = {
-    address:              Rails.application.secrets.smtp_address,
-    port:                 Rails.application.secrets.smtp_port,
-    user_name:            Rails.application.secrets.smtp_user_name,
-    password:             Rails.application.secrets.smtp_password,
+    address:              Rails.application.credentials.smtp_address,
+    port:                 Rails.application.credentials.smtp_port,
+    user_name:            Rails.application.credentials.smtp_user_name,
+    password:             Rails.application.credentials.smtp_password,
     authentication:       "plain",
     enable_starttls_auto: true
   }', env: 'production'
 
-insert_into_file 'config/secrets.yml', after: 'production:' do
-<<-CODE
-\n  smtp_address: <%= ENV["SMTP_ADDRESS"] %>
-  smtp_port: <%= ENV["SMTP_PORT"] %>
-  smtp_user_name: <%= ENV["SMTP_USER_NAME"] %>
-  smtp_password: <%= ENV["SMTP_PASSWORD"] %>
-  mail_delivery_method: <%= ENV["MAIL_DELIVERY_METHOD"] %>
-CODE
-end
+run 'echo default_mail_from: >> config/credentials.yml.example'
+run 'echo smtp_address: >> config/credentials.yml.example'
+run 'echo smtp_port: >> config/credentials.yml.example'
+run 'echo smtp_user_name: >> config/credentials.yml.example'
+run 'echo smtp_password: >> config/credentials.yml.example'
+run 'echo smtp_delivery_method: >> config/credentials.yml.example'
 
-insert_into_file 'config/secrets.yml', after: 'test:' do
-<<-CODE
-\n  mail_delivery_method: test
-CODE
-end
+gsub_file 'app/mailers/application_mailer.rb', "'from@example.com'", "Rails.application.credentials.default_mail_from"
 
-
-###
-## BOWER
-###
-
-if want_bower = yes?("Do you want to install bower?")
-  file '.bowerrc', <<-CODE
-{
-  "directory": "vendor/assets/components"
-}
-CODE
-
-  inject_into_file 'config/initializers/assets.rb', after: "Rails.application.config.assets.version = '1.0'" do
+insert_into_file 'app/mailers/application_mailer.rb', after: "ActionMailer::Base" do
   <<-CODE
-\nRails.application.config.assets.paths << Rails.root.join('vendor', 'assets', 'components').to_s
+  \n  append_view_path Rails.root.join('app', 'views', 'mailers')
   CODE
-  end
 end
+
+environment 'config.action_mailer.asset_host = "#{Rails.application.credentials.default_protocol}://#{Rails.application.credentials.default_host}"'
 
 ###
 ## DETAILS
 ###
 
-environment 'config.action_mailer.asset_host = "#{Rails.application.secrets.default_protocol}://#{Rails.application.secrets.default_host}"'
-
-# make possible to use url helpers in assets
-environment 'config.assets.configure do |env|
-      env.context_class.class_eval do
-        include Rails.application.routes.url_helpers
-      end
-    end'
+run "echo default_host: >> config/credentials.yml.example"
+run "echo default_protocol: >> config/credentials.yml.example"
 
 # adds database.yml to .gitignore
 run "echo /config/database.yml >> .gitignore"
@@ -408,8 +267,7 @@ run "touch CHANGELOG.md"
 p 'TO FINISH INSTALLATION, DO THE FOLLOWING THINGS'
 p "execute command 'cd #{app_name}'"
 p "execute command 'bundle install'"
-p "execute command 'bower init'" if want_bower
-p "execute command 'rails generate pundit:install'" if want_pundit
+p "execute command 'rails generate pundit:install'"
 if want_devise
   p "execute command 'rails generate devise:install'"
   p "configure devise updating the file config/initializers/devise.rb"

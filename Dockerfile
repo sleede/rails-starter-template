@@ -25,7 +25,7 @@ RUN bundle install --binstubs
 RUN mkdir -p /usr/src/app
 RUN mkdir -p /usr/src/app/config
 RUN mkdir -p /usr/src/app/log
-RUN mkdir -p /usr/src/app/public/uploads
+RUN mkdir -p /usr/src/app/storage
 RUN mkdir -p /usr/src/app/public/assets
 RUN mkdir -p /usr/src/app/tmp/sockets
 RUN mkdir -p /usr/src/app/tmp/pids
@@ -38,7 +38,7 @@ COPY . /usr/src/app
 
 # Volumes
 VOLUME /usr/src/app/public
-VOLUME /usr/src/app/public/uploads
+VOLUME /usr/src/app/storage
 VOLUME /usr/src/app/public/assets
 VOLUME /var/log/supervisor
 

@@ -9,7 +9,7 @@ services:
       - ./config/env
     volumes:
       - ./public/assets:/usr/src/app/public/assets
-      - ./public/uploads:/usr/src/app/public/uploads
+      - ./storage:/usr/src/app/storage
       - ./log:/var/log/supervisor
     depends_on:
       - postgres
@@ -23,7 +23,7 @@ services:
     restart: always
 
   redis:
-    image: redis:3
+    image: redis:4
     volumes:
       - ./redis:/data
     restart: always
